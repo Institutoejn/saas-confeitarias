@@ -42,7 +42,11 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, trend, trendUp, icon,
   </div>
 );
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  storeName?: string;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ storeName }) => {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
 
@@ -52,7 +56,7 @@ const Dashboard: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-            {greeting}, Confeitaria!
+            {greeting}, {storeName || 'Confeitaria'}!
           </h1>
           <p className="text-gray-500 mt-1">Aqui está o resumo da sua operação hoje.</p>
         </div>
