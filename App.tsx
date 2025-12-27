@@ -32,7 +32,10 @@ const App: React.FC = () => {
   
   const [incomingOrders, setIncomingOrders] = useState<Order[]>([]);
   const [showNotification, setShowNotification] = useState(false);
+  
+  // O catálogo começa vazio ou com mock, mas será atualizado via useEffect
   const [catalog, setCatalog] = useState<CatalogItem[]>(MOCK_CATALOG);
+  
   const [ordersViewMode, setOrdersViewMode] = useState<'incoming' | 'products'>('incoming');
   const [isCustomerView, setIsCustomerView] = useState(false);
   
@@ -43,12 +46,36 @@ const App: React.FC = () => {
 
   const [shareableLink, setShareableLink] = useState('');
 
-  // 1. Check Session & Auth
+  // 1. Detectar Modo Cliente (URL Params) e Buscar Dados Públicos
+  useEffect(() => {
+    // Check URL for customer mode
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const mode = params.get('mode');
+      const storeId = params.get('storeId');
+      
+      // Gera o link base (será atualizado se o usuário logar)
+      const baseUrl = window.location.origin + window.location.pathname;
+      setShareableLink(`${baseUrl}?mode=customer`);
+
+      if (mode === 'customer') {
+        setIsCustomerView(true);
+        if (storeId) {
+          fetchPublicCatalog(storeId);
+        }
+      }
+    }
+  }, []);
+
+  // 2. Auth e Sessão do Admin
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsAuthenticated(!!session);
-      setLoading(false);
+      // Se não estivermos no modo cliente, o loading termina aqui
+      if (!window.location.search.includes('mode=customer')) {
+         setLoading(false);
+      }
     });
 
     const {
@@ -58,35 +85,63 @@ const App: React.FC = () => {
       setIsAuthenticated(!!session);
     });
 
-    // Check URL for customer mode
-    if (typeof window !== 'undefined') {
-      const baseUrl = window.location.origin + window.location.pathname;
-      setShareableLink(`${baseUrl}?mode=customer`);
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('mode') === 'customer') {
-        setIsCustomerView(true);
-        // Customer doesn't need to be authenticated as admin, 
-        // but for now, we render the customer view directly regardless of auth
-        // if we want to bypass login completely for customers, we handle it in the render return.
-      }
-    }
-
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. Load Profile Data when Session Exists
+  // 3. Atualizar Link Compartilhável e Perfil quando Admin loga
   useEffect(() => {
     if (session?.user) {
-      // In a real scenario, fetch from 'profiles' table
-      // const { data } = await supabase.from('profiles').select('*').single();
-      // For now, use metadata or defaults
+      // Atualiza o link para incluir o ID do usuário logado
+      const baseUrl = window.location.origin + window.location.pathname;
+      setShareableLink(`${baseUrl}?mode=customer&storeId=${session.user.id}`);
+
+      // Carrega dados do perfil (Meta dados ou tabela profiles futura)
       setCompanyProfile(prev => ({
         ...prev,
         name: session.user.user_metadata.store_name || prev.name,
         email: session.user.email || prev.email
       }));
+      
+      // Se for ADMIN, carrega o catálogo dele para gestão
+      if (!isCustomerView) {
+        fetchPublicCatalog(session.user.id);
+      }
     }
-  }, [session]);
+  }, [session, isCustomerView]);
+
+  // Função para buscar catálogo (usada tanto pelo Admin quanto pelo Cliente Público)
+  const fetchPublicCatalog = async (storeId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('catalog')
+        .select('*')
+        .eq('user_id', storeId)
+        .eq('is_available', true); // Clientes só veem itens disponíveis
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const mappedData = data.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          price: item.price,
+          category: item.category,
+          imageUrl: item.image_url,
+          isAvailable: item.is_available
+        }));
+        setCatalog(mappedData);
+      } else {
+        // Se não tiver produtos ou der erro, mantém vazio ou mock dependendo da estratégia
+        // Para MVP, se vazio, mantemos vazio para incentivar cadastro
+        if (data && data.length === 0) setCatalog([]);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar catálogo:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = () => {
     // Auth handled by Supabase subscription
@@ -97,6 +152,7 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
     setActiveTab('dashboard');
     setIsCustomerView(false);
+    window.location.href = window.location.origin; // Limpa URL params ao deslogar
   };
 
   const handleOrderComplete = (details: CustomCakeDetails | CatalogItem, total: number) => {
@@ -141,12 +197,11 @@ const App: React.FC = () => {
 
   // Loading State
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50">Carregando SweetSaaS...</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-brand-600 font-bold animate-pulse">Carregando SweetSaaS...</div>;
   }
 
   // Handle Guest/Customer View separately from Auth Check
   if (isCustomerView) {
-    // If it's customer view, we render the app in "Customer Mode" regardless of admin login
     return (
       <div className="min-h-screen bg-gray-50 font-sans">
         <div className={`fixed top-4 right-4 z-[100] transform transition-all duration-500 ease-in-out ${showNotification ? 'translate-y-0 opacity-100' : '-translate-y-20 opacity-0 pointer-events-none'}`}>
@@ -161,7 +216,8 @@ const App: React.FC = () => {
              <div className="flex items-center gap-2">
                 <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center text-white font-bold shadow-brand-200 shadow-md">S</div>
                 <div className="flex flex-col">
-                  <span className="font-bold text-gray-800 leading-tight">{companyProfile.name}</span>
+                  {/* Nota: Em um app real, buscaríamos o nome da loja via ID também na tabela profiles */}
+                  <span className="font-bold text-gray-800 leading-tight">{companyProfile.name === 'Confeitaria' ? 'Confeitaria' : companyProfile.name}</span>
                   <span className="text-[10px] text-green-600 font-bold uppercase tracking-wider">Aberto Agora</span>
                 </div>
              </div>
@@ -181,13 +237,23 @@ const App: React.FC = () => {
            ) : (
              <div className="space-y-6 animate-fade-in">
                <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-6 flex flex-col sm:flex-row justify-between items-center gap-2 text-center sm:text-left shadow-sm">
-                  <span className="text-sm">👋 Bem-vindo ao Cardápio Digital da <strong>{companyProfile.name}</strong></span>
+                  <span className="text-sm">👋 Bem-vindo ao nosso Cardápio Digital!</span>
                   {!window.location.search.includes('mode=customer') && (
                     <button onClick={() => setIsCustomerView(false)} className="text-xs font-bold underline hover:text-blue-900 whitespace-nowrap">Voltar para Admin</button>
                   )}
                </div>
-               <div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-gray-800">Cardápio</h2></div>
-               <OrderBuilder onComplete={handleOrderComplete} catalog={catalog} />
+               
+               {/* Se o catálogo estiver vazio no modo cliente, mostra mensagem */}
+               {catalog.length === 0 ? (
+                 <div className="text-center py-10">
+                   <p className="text-gray-500">Nenhum produto disponível no momento.</p>
+                 </div>
+               ) : (
+                 <>
+                   <div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-gray-800">Cardápio</h2></div>
+                   <OrderBuilder onComplete={handleOrderComplete} catalog={catalog} />
+                 </>
+               )}
              </div>
            )}
         </main>
