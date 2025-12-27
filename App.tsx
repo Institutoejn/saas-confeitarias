@@ -8,7 +8,7 @@ import ProfileEditor from './components/ProfileEditor';
 import ProductManager from './components/ProductManager'; // Importação nova
 import Login from './components/Login'; // Importação do Login
 import { CustomCakeDetails, Order, CustomCakeDetails as ICakeDetails, CompanyProfile, CatalogItem, MOCK_CATALOG } from './types';
-import { Link as LinkIcon, Smartphone, Clock, MapPin, DollarSign, Menu, Package, ListOrdered, ExternalLink, X } from 'lucide-react';
+import { Link as LinkIcon, Smartphone, Clock, MapPin, DollarSign, Menu, Package, ListOrdered, X } from 'lucide-react';
 
 const App: React.FC = () => {
   // Estado de Autenticação (Novo)
