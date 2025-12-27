@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import OrderBuilder from './components/OrderBuilder';
@@ -8,7 +8,7 @@ import ProfileEditor from './components/ProfileEditor';
 import ProductManager from './components/ProductManager'; // Importação nova
 import Login from './components/Login'; // Importação do Login
 import { CustomCakeDetails, Order, CustomCakeDetails as ICakeDetails, CompanyProfile, CatalogItem, MOCK_CATALOG } from './types';
-import { Link as LinkIcon, Smartphone, Clock, MapPin, DollarSign, Menu, Package, ListOrdered } from 'lucide-react';
+import { Link as LinkIcon, Smartphone, Clock, MapPin, DollarSign, Menu, Package, ListOrdered, ExternalLink, X } from 'lucide-react';
 
 const App: React.FC = () => {
   // Estado de Autenticação (Novo)
@@ -44,6 +44,25 @@ const App: React.FC = () => {
     total: number;
   } | null>(null);
 
+  // Link dinâmico para compartilhamento
+  const [shareableLink, setShareableLink] = useState('');
+
+  // Efeito para detectar acesso via Link de Cliente e gerar URL correta
+  useEffect(() => {
+    // 1. Gera o link baseando-se na URL atual do navegador
+    if (typeof window !== 'undefined') {
+      const baseUrl = window.location.origin + window.location.pathname;
+      setShareableLink(`${baseUrl}?mode=customer`);
+
+      // 2. Verifica se a URL atual tem o parâmetro mode=customer
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('mode') === 'customer') {
+        setIsAuthenticated(true); // Pula o login
+        setIsCustomerView(true);  // Ativa modo cliente
+      }
+    }
+  }, []);
+
   // Handler para Login bem-sucedido
   const handleLogin = () => {
     setIsAuthenticated(true);
@@ -70,6 +89,12 @@ const App: React.FC = () => {
     setCompanyProfile(newProfile);
   };
 
+  // Função para copiar o link
+  const copyLinkToClipboard = () => {
+    navigator.clipboard.writeText(shareableLink);
+    alert('Link copiado! Envie para seus clientes.');
+  };
+
   // Se não estiver autenticado, exibe a tela de login
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
@@ -87,27 +112,31 @@ const App: React.FC = () => {
         return (
           <div className="space-y-6 animate-fade-in">
             
-            {/* Seção de Compartilhamento (Sempre visível) */}
+            {/* Seção de Compartilhamento (Funcional) */}
             <div className="flex flex-col md:flex-row items-center justify-between p-6 bg-white rounded-2xl shadow-sm border border-gray-200 gap-4">
-              <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 bg-brand-50 rounded-full flex items-center justify-center">
+              <div className="flex items-center gap-4 w-full md:w-auto">
+                 <div className="w-12 h-12 bg-brand-50 rounded-full flex items-center justify-center shrink-0">
                     <LinkIcon className="text-brand-600" size={24} />
                  </div>
-                 <div>
+                 <div className="min-w-0 flex-1">
                     <h2 className="text-lg font-bold text-gray-800">Link do Cardápio Digital</h2>
-                    <p className="text-sm text-gray-500">sweetsaas.com/pedidos/{companyProfile.name.toLowerCase().replace(/\s+/g, '-')}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-sm text-gray-500 truncate bg-gray-50 px-2 py-1 rounded border border-gray-100 font-mono select-all">
+                        {shareableLink}
+                      </p>
+                    </div>
                  </div>
               </div>
               <div className="flex gap-2 w-full md:w-auto">
                  <button 
-                  onClick={() => alert('Link copiado!')}
-                  className="flex-1 md:flex-none px-4 py-2 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50"
+                  onClick={copyLinkToClipboard}
+                  className="flex-1 md:flex-none px-4 py-2 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 active:scale-95 transition-transform"
                  >
                    Copiar Link
                  </button>
                  <button 
                   onClick={() => setIsCustomerView(true)}
-                  className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700 shadow-lg shadow-brand-100 transition-all"
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700 shadow-lg shadow-brand-100 transition-all active:scale-95"
                 >
                   <Smartphone size={18} />
                   Simular App
@@ -141,7 +170,8 @@ const App: React.FC = () => {
                 {incomingOrders.length === 0 ? (
                   <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl text-gray-400">
                     <p>Nenhum pedido recebido ainda.</p>
-                    <p className="text-sm">Simule um pedido como cliente para ver aparecer aqui.</p>
+                    <p className="text-sm mt-2">Envie o link acima para seus clientes ou</p>
+                    <button onClick={() => setIsCustomerView(true)} className="text-brand-600 font-bold hover:underline">simule um pedido aqui</button>.
                   </div>
                 ) : (
                   <div className="grid gap-4">
@@ -222,14 +252,17 @@ const App: React.FC = () => {
       return (
         <div className="space-y-6 animate-fade-in">
            {isCustomerView && (
-             <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-6 flex flex-col sm:flex-row justify-between items-center gap-2 text-center sm:text-left">
-                <span className="text-sm">👀 Você está visualizando como um <strong>Cliente</strong> no celular.</span>
-                <button 
-                  onClick={() => { setIsCustomerView(false); setOrderInProgress(null); }}
-                  className="text-xs font-bold underline hover:text-blue-900"
-                >
-                  Sair do modo simulação
-                </button>
+             <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-6 flex flex-col sm:flex-row justify-between items-center gap-2 text-center sm:text-left shadow-sm">
+                <span className="text-sm">👋 Bem-vindo ao Cardápio Digital da <strong>{companyProfile.name}</strong></span>
+                {/* Botão de sair apenas se não for link direto (ou seja, se for simulação do admin) */}
+                {!window.location.search.includes('mode=customer') && (
+                  <button 
+                    onClick={() => { setIsCustomerView(false); setOrderInProgress(null); }}
+                    className="text-xs font-bold underline hover:text-blue-900 whitespace-nowrap"
+                  >
+                    Voltar para Admin
+                  </button>
+                )}
              </div>
            )}
 
@@ -261,9 +294,18 @@ const App: React.FC = () => {
         <header className="bg-white shadow-sm py-4 px-6 sticky top-0 z-50">
           <div className="max-w-4xl mx-auto flex justify-between items-center">
              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-brand-500 rounded-full flex items-center justify-center text-white font-bold">S</div>
-                <span className="font-bold text-gray-800">{companyProfile.name}</span>
+                <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center text-white font-bold shadow-brand-200 shadow-md">S</div>
+                <div className="flex flex-col">
+                  <span className="font-bold text-gray-800 leading-tight">{companyProfile.name}</span>
+                  <span className="text-[10px] text-green-600 font-bold uppercase tracking-wider">Aberto Agora</span>
+                </div>
              </div>
+             {/* Se for Admin simulando, mostra botão de voltar no header também */}
+             {!window.location.search.includes('mode=customer') && (
+               <button onClick={() => setIsCustomerView(false)} className="md:hidden text-gray-500">
+                 <X size={24} />
+               </button>
+             )}
           </div>
         </header>
         <main className="max-w-4xl mx-auto p-4 md:p-8">
