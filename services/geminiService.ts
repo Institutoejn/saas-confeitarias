@@ -1,8 +1,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialize Gemini
-// Note: In a real app, ensure API_KEY is set in environment variables
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+// Initialize Gemini safely. 
+// If API_KEY is missing, we use a placeholder to prevent the app from crashing at startup.
+const apiKey = process.env.API_KEY || 'dummy_key_for_build';
+const ai = new GoogleGenAI({ apiKey });
 
 export interface DeliveryEstimate {
   estimatedDistanceKm: number;
@@ -13,18 +14,16 @@ export interface DeliveryEstimate {
 
 /**
  * Uses Gemini to simulate a Matrix API calculation.
- * In a real-world scenario with the Google Maps Tool enabled, 
- * we would use the toolConfig to actually query distance.
- * Here, we demonstrate structural extraction and logic application.
  */
 export const calculateDeliveryFee = async (address: string): Promise<DeliveryEstimate> => {
-  if (!process.env.API_KEY) {
-    // Fallback if no key provided for demo
+  // Check if we have a valid key before attempting the call
+  if (!process.env.API_KEY || process.env.API_KEY === 'dummy_key_for_build') {
+    console.warn("API Key missing. Using fallback mock data.");
     return {
       estimatedDistanceKm: 5.2,
       deliveryFee: 15.50,
       zone: "Zona Sul (Estimada)",
-      reasoning: "Chave de API não configurada. Usando valores de demonstração."
+      reasoning: "Modo de demonstração (API Key não configurada)."
     };
   }
 
