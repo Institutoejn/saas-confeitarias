@@ -339,7 +339,7 @@ const App: React.FC = () => {
   );
 
   const renderContent = () => {
-    if (activeTab === 'dashboard') return <Dashboard storeName={companyProfile.name} />;
+    if (activeTab === 'dashboard') return <Dashboard storeName={companyProfile.name} orders={incomingOrders} />;
 
     if (activeTab === 'orders') {
       return (
