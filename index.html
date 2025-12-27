@@ -4,11 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SweetSaaS - Gestão de Confeitaria</title>
+    
+    <!-- Google Fonts Import -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&family=Poppins:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
+            fontFamily: {
+              sans: ['Poppins', 'sans-serif'],
+              heading: ['Montserrat', 'sans-serif'],
+            },
             colors: {
               brand: {
                 50: '#fdf2f8',
@@ -27,6 +37,33 @@
         }
       }
     </script>
+    
+    <!-- Global Style Overrides to enforce specific weights -->
+    <style>
+      body {
+        font-family: 'Poppins', sans-serif;
+        font-weight: 300; /* Leaning towards "Thin/Light" as requested */
+      }
+      
+      /* Enforce Montserrat Black (900) for Headings */
+      h1, h2, h3, h4, h5, h6, .font-heading {
+        font-family: 'Montserrat', sans-serif;
+        font-weight: 900 !important; /* Black Weight */
+        letter-spacing: -0.02em;
+      }
+
+      /* Enforce Montserrat Bold (700) for Strong/Bold elements */
+      strong, b, .font-bold {
+        font-family: 'Montserrat', sans-serif;
+        font-weight: 700;
+      }
+      
+      /* Smooth scrolling */
+      html {
+        scroll-behavior: smooth;
+      }
+    </style>
+
   <script type="importmap">
 {
   "imports": {
