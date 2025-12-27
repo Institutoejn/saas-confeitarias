@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '../services/supabaseClient';
 import { Cake, Lock, Mail, Loader2, ArrowRight, User, Store } from 'lucide-react';
 
 interface LoginProps {
@@ -6,45 +7,50 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [isLoginView, setIsLoginView] = useState(true); // Alternar entre Login e Cadastro
+  const [isLoginView, setIsLoginView] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
-  // Campos extras para o cadastro (visual apenas, mantendo a lógica simples)
   const [name, setName] = useState('');
   const [storeName, setStoreName] = useState('');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    // Simulação de delay de rede
-    setTimeout(() => {
+    try {
       if (isLoginView) {
-        // Lógica de Login existente
-        if (email === 'admin@sweetsaas.com' && password === '123456') {
-          onLogin();
-        } else if (email && password) {
-           // Aceita login genérico para teste
-          onLogin();
-        } else {
-          setError('Por favor, preencha todos os campos.');
-          setLoading(false);
-        }
+        // Login com Supabase
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        // O listener no App.tsx vai detectar a sessão e logar
       } else {
-        // Lógica de Cadastro (Mock)
-        if (email && password && name && storeName) {
-          onLogin(); // Simula login automático após cadastro
-        } else {
-          setError('Por favor, preencha todos os campos obrigatórios.');
-          setLoading(false);
-        }
+        // Cadastro com Supabase
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: name,
+              store_name: storeName
+            }
+          }
+        });
+        if (signUpError) throw signUpError;
+        alert('Cadastro realizado! Verifique seu email ou faça login.');
+        setIsLoginView(true);
       }
-    }, 1500);
+    } catch (err: any) {
+      setError(err.message || 'Ocorreu um erro. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleView = () => {
@@ -54,7 +60,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-brand-100 flex items-center justify-center p-4 py-8 md:py-4">
-      {/* Decoração de Fundo */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-10 left-10 w-64 h-64 bg-brand-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
         <div className="absolute bottom-10 right-10 w-64 h-64 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style={{ animationDelay: '2s'}}></div>
@@ -62,7 +67,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row relative z-10 md:min-h-[600px]">
         
-        {/* Lado Direito (Branding) - No Mobile aparece em PRIMEIRO (Top) */}
         <div className="w-full md:w-1/2 bg-gradient-to-br from-brand-600 to-brand-800 relative overflow-hidden order-1 md:order-2 flex flex-col justify-between p-8 md:p-12 text-white shrink-0">
           <div className="absolute top-0 left-0 w-full h-full opacity-20">
              <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -88,23 +92,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                </p>
             </div>
           </div>
-
-          <div className="relative z-10 mt-8 md:mt-12 hidden xs:block">
-            <div className="flex items-center gap-4">
-               <div className="flex -space-x-3">
-                 {[1,2,3,4].map(i => (
-                   <img key={i} className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-brand-700" src={`https://i.pravatar.cc/100?img=${i+10}`} alt="User" />
-                 ))}
-               </div>
-               <div>
-                 <p className="font-bold text-sm md:text-base">4.9/5</p>
-                 <p className="text-xs text-brand-200">Avaliação média</p>
-               </div>
-            </div>
-          </div>
         </div>
 
-        {/* Lado Esquerdo (Formulário) - No Mobile aparece em SEGUNDO (Bottom) */}
         <div className="w-full md:w-1/2 p-6 md:p-12 flex flex-col justify-center order-2 md:order-1 bg-white">
           <div className="mb-6 md:mb-8 mt-4 md:mt-0">
             <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
@@ -195,16 +184,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </div>
             </div>
 
-            {isLoginView && (
-              <div className="flex items-center justify-between text-sm mt-2">
-                <label className="flex items-center gap-2 cursor-pointer text-gray-600 hover:text-gray-900">
-                  <input type="checkbox" className="rounded text-brand-600 focus:ring-brand-500 border-gray-300" />
-                  Lembrar de mim
-                </label>
-                <a href="#" className="text-brand-600 hover:text-brand-700 font-medium hover:underline">Esqueceu a senha?</a>
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={loading}
@@ -231,12 +210,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 {isLoginView ? 'Cadastre sua loja' : 'Fazer Login'}
               </button>
             </p>
-            
-            {isLoginView && (
-              <div className="mt-6 inline-block px-4 py-2 bg-gray-50 rounded-full border border-gray-100 text-xs text-gray-400">
-                <p>Demo: <strong>admin@sweetsaas.com</strong> / <strong>123456</strong></p>
-              </div>
-            )}
           </div>
         </div>
 

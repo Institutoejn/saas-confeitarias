@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../services/supabaseClient';
 import { CatalogItem } from '../types';
-import { Plus, Edit2, Trash2, X, Upload, Image as ImageIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Upload, Image as ImageIcon, Loader2 } from 'lucide-react';
 
 interface ProductManagerProps {
   catalog: CatalogItem[];
@@ -8,10 +9,11 @@ interface ProductManagerProps {
 }
 
 const ProductManager: React.FC<ProductManagerProps> = ({ catalog, setCatalog }) => {
+  const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
+  const [session, setSession] = useState<any>(null);
   
-  // Estado inicial do form
   const initialFormState: CatalogItem = {
     id: '',
     name: '',
@@ -25,13 +27,50 @@ const ProductManager: React.FC<ProductManagerProps> = ({ catalog, setCatalog }) 
   const [formData, setFormData] = useState<CatalogItem>(initialFormState);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 1. Fetch Session and Catalog from Supabase
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+        fetchCatalog(session.user.id);
+      }
+    });
+  }, []);
+
+  const fetchCatalog = async (userId: string) => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('catalog')
+      .select('*')
+      .eq('user_id', userId);
+    
+    if (error) {
+      console.error('Erro ao buscar catálogo:', error);
+    } else if (data) {
+      // Mapeia os campos do DB (snake_case) para o frontend (camelCase) se necessário
+      // Como criamos a tabela baseada no tipo, assumimos compatibilidade ou ajustamos aqui.
+      // Vou assumir que o banco usa snake_case (padrão SQL) e fazer o map.
+      const mappedData = data.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        price: item.price,
+        category: item.category,
+        imageUrl: item.image_url,
+        isAvailable: item.is_available
+      }));
+      setCatalog(mappedData);
+    }
+    setLoading(false);
+  };
+
   const handleOpenModal = (item?: CatalogItem) => {
     if (item) {
       setEditingItem(item);
       setFormData(item);
     } else {
       setEditingItem(null);
-      setFormData({ ...initialFormState, id: Math.random().toString(36).substr(2, 9) });
+      setFormData({ ...initialFormState });
     }
     setIsModalOpen(true);
   };
@@ -41,20 +80,76 @@ const ProductManager: React.FC<ProductManagerProps> = ({ catalog, setCatalog }) 
     setEditingItem(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir este produto?')) {
-      setCatalog(prev => prev.filter(item => item.id !== id));
+      const { error } = await supabase
+        .from('catalog')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        alert('Erro ao excluir: ' + error.message);
+      } else {
+        setCatalog(prev => prev.filter(item => item.id !== id));
+      }
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingItem) {
-      setCatalog(prev => prev.map(item => item.id === editingItem.id ? formData : item));
-    } else {
-      setCatalog(prev => [formData, ...prev]);
+    if (!session?.user) return;
+
+    setLoading(true);
+
+    const payload = {
+      user_id: session.user.id,
+      name: formData.name,
+      description: formData.description,
+      price: formData.price,
+      category: formData.category,
+      image_url: formData.imageUrl,
+      is_available: formData.isAvailable
+    };
+
+    try {
+      if (editingItem) {
+        // Update
+        const { error } = await supabase
+          .from('catalog')
+          .update(payload)
+          .eq('id', editingItem.id);
+        
+        if (error) throw error;
+        
+        setCatalog(prev => prev.map(item => item.id === editingItem.id ? { ...formData, id: editingItem.id } : item));
+      } else {
+        // Insert
+        const { data, error } = await supabase
+          .from('catalog')
+          .insert([payload])
+          .select();
+        
+        if (error) throw error;
+        
+        if (data) {
+          const newItem = {
+            id: data[0].id,
+            name: data[0].name,
+            description: data[0].description,
+            price: data[0].price,
+            category: data[0].category,
+            imageUrl: data[0].image_url,
+            isAvailable: data[0].is_available
+          };
+          setCatalog(prev => [newItem, ...prev]);
+        }
+      }
+      handleCloseModal();
+    } catch (err: any) {
+      alert('Erro ao salvar: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-    handleCloseModal();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,6 +157,8 @@ const ProductManager: React.FC<ProductManagerProps> = ({ catalog, setCatalog }) 
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
+        // Nota: Salvar Base64 direto no Banco não é ideal para produção (melhor usar Supabase Storage),
+        // mas funciona perfeitamente para este MVP sem complicar a configuração.
         setFormData({ ...formData, imageUrl: reader.result as string });
       };
       reader.readAsDataURL(file);
@@ -80,47 +177,49 @@ const ProductManager: React.FC<ProductManagerProps> = ({ catalog, setCatalog }) 
         </button>
       </div>
 
-      {/* Grid de Produtos */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {catalog.map(item => (
-          <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden group hover:border-brand-300 transition-all">
-            <div className="h-40 bg-gray-100 relative">
-              {item.imageUrl ? (
-                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-gray-400">
-                  <ImageIcon size={40} />
+      {loading && catalog.length === 0 ? (
+        <div className="flex justify-center py-10"><Loader2 className="animate-spin text-brand-600" /></div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {catalog.map(item => (
+            <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden group hover:border-brand-300 transition-all">
+              <div className="h-40 bg-gray-100 relative">
+                {item.imageUrl ? (
+                  <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <ImageIcon size={40} />
+                  </div>
+                )}
+                <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 p-1.5 rounded-lg shadow-sm">
+                  <button onClick={() => handleOpenModal(item)} className="text-blue-600 hover:text-blue-800">
+                    <Edit2 size={18} />
+                  </button>
+                  <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800">
+                    <Trash2 size={18} />
+                  </button>
                 </div>
-              )}
-              <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 p-1.5 rounded-lg shadow-sm">
-                <button onClick={() => handleOpenModal(item)} className="text-blue-600 hover:text-blue-800">
-                  <Edit2 size={18} />
-                </button>
-                <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800">
-                  <Trash2 size={18} />
-                </button>
+                <span className={`absolute top-2 left-2 text-xs font-bold px-2 py-1 rounded-full border ${
+                  item.category === 'combo' ? 'bg-purple-100 text-purple-700 border-purple-200' :
+                  item.category === 'cake' ? 'bg-pink-100 text-pink-700 border-pink-200' :
+                  'bg-gray-100 text-gray-700 border-gray-200'
+                }`}>
+                  {item.category === 'combo' ? 'Combo' : item.category === 'cake' ? 'Bolo' : item.category === 'sweet' ? 'Doce' : 'Outro'}
+                </span>
               </div>
-              <span className={`absolute top-2 left-2 text-xs font-bold px-2 py-1 rounded-full border ${
-                item.category === 'combo' ? 'bg-purple-100 text-purple-700 border-purple-200' :
-                item.category === 'cake' ? 'bg-pink-100 text-pink-700 border-pink-200' :
-                'bg-gray-100 text-gray-700 border-gray-200'
-              }`}>
-                {item.category === 'combo' ? 'Combo' : item.category === 'cake' ? 'Bolo' : item.category === 'sweet' ? 'Doce' : 'Outro'}
-              </span>
-            </div>
-            
-            <div className="p-4">
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-bold text-gray-800 line-clamp-1">{item.name}</h3>
-                <span className="font-bold text-brand-600 whitespace-nowrap">R$ {item.price.toFixed(2)}</span>
+              
+              <div className="p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-bold text-gray-800 line-clamp-1">{item.name}</h3>
+                  <span className="font-bold text-brand-600 whitespace-nowrap">R$ {item.price.toFixed(2)}</span>
+                </div>
+                <p className="text-sm text-gray-500 line-clamp-2 min-h-[40px]">{item.description}</p>
               </div>
-              <p className="text-sm text-gray-500 line-clamp-2 min-h-[40px]">{item.description}</p>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Modal de Criação/Edição */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
@@ -205,7 +304,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ catalog, setCatalog }) 
                   value={formData.description}
                   onChange={e => setFormData({...formData, description: e.target.value})}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none resize-none"
-                  placeholder="Descreva os ingredientes ou itens do combo..."
+                  placeholder="Descreva os ingredientes..."
                 />
               </div>
 
@@ -219,9 +318,10 @@ const ProductManager: React.FC<ProductManagerProps> = ({ catalog, setCatalog }) 
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-1 py-2 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700"
+                  disabled={loading}
+                  className="flex-1 py-2 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700 flex items-center justify-center gap-2"
                 >
-                  Salvar Produto
+                  {loading ? <Loader2 className="animate-spin" size={18} /> : 'Salvar Produto'}
                 </button>
               </div>
             </form>
