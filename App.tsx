@@ -428,7 +428,7 @@ const App: React.FC = () => {
       );
     }
 
-    if (activeTab === 'loyalty') return <LoyaltyProgram isCustomerView={false} />;
+    if (activeTab === 'loyalty') return <LoyaltyProgram isCustomerView={false} orders={incomingOrders} />;
 
     return <div className="p-10 text-center text-gray-500">Funcionalidade "{activeTab}" em desenvolvimento.</div>;
   };

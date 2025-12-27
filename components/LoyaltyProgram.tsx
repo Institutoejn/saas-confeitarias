@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { MOCK_VIP_CLIENTS, User, Reward } from '../types';
-import { Gift, Star, Award, TrendingUp, CheckCircle, Lock, Users, ArrowUpRight, Plus, Settings, Edit2, Trash2, X, Save, Loader2 } from 'lucide-react';
+import { MOCK_VIP_CLIENTS, User, Reward, Order } from '../types';
+import { Gift, Star, Award, TrendingUp, CheckCircle, Lock, Users, ArrowUpRight, Plus, Settings, Edit2, Trash2, X, Save, Loader2, Inbox } from 'lucide-react';
 
 interface LoyaltyProgramProps {
   isCustomerView?: boolean;
+  orders?: Order[]; // Recebe os pedidos para cálculo real
 }
 
-const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false }) => {
+const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false, orders = [] }) => {
   // --- ESTADOS GLOBAIS ---
   const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<User>(MOCK_VIP_CLIENTS[0]);
@@ -52,9 +53,6 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
         if (storeId) {
           query = query.eq('user_id', storeId);
         } else if (!session?.user) {
-          // Se não tem ID na URL e não é admin logado, não mostra nada por segurança
-          // ou poderia mostrar um set vazio.
-          console.warn("Nenhum storeId fornecido para visualização pública.");
           setRewards([]);
           return;
         }
@@ -72,7 +70,7 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
            costInPoints: r.cost_in_points,
            type: r.type,
            minTier: r.min_tier,
-           imageUrl: '' // Campo futuro
+           imageUrl: ''
         }));
         setRewards(mappedRewards);
       }
@@ -82,6 +80,46 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
       setLoading(false);
     }
   };
+
+  // --- CÁLCULOS ESTATÍSTICOS (ADMIN) ---
+  const { clientsInClub, pointsInCirculation, calculatedClients } = useMemo(() => {
+    if (isCustomerView) return { clientsInClub: 0, pointsInCirculation: 0, calculatedClients: [] };
+
+    const clientMap = new Map<string, { name: string, points: number, tier: 'Bronze' | 'Prata' | 'Ouro' }>();
+    let totalPoints = 0;
+
+    orders.forEach(order => {
+      // 1 Ponto = 1 Real gasto (Lógica simples)
+      const pointsEarned = Math.floor(order.totalAmount);
+      totalPoints += pointsEarned;
+
+      const current = clientMap.get(order.customerId) || { name: 'Visitante', points: 0, tier: 'Bronze' };
+      const newPoints = current.points + pointsEarned;
+      
+      // Lógica de Tier simples
+      let newTier: 'Bronze' | 'Prata' | 'Ouro' = 'Bronze';
+      if (newPoints >= 500) newTier = 'Ouro';
+      else if (newPoints >= 200) newTier = 'Prata';
+
+      clientMap.set(order.customerId, {
+        name: order.customerId === 'guest-123' ? 'Cliente Visitante' : order.customerId, // Em produção usaria o nome real do user
+        points: newPoints,
+        tier: newTier
+      });
+    });
+
+    const clientsArray = Array.from(clientMap.entries()).map(([id, data]) => ({
+      id,
+      ...data
+    })).sort((a, b) => b.points - a.points); // Ordenar por maior pontuação
+
+    return {
+      clientsInClub: clientMap.size,
+      pointsInCirculation: totalPoints,
+      calculatedClients: clientsArray
+    };
+  }, [orders, isCustomerView]);
+
 
   // --- LÓGICA DO CLIENTE ---
   const handleRedeem = (reward: Reward) => {
@@ -105,7 +143,7 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
     return Math.min((currentUser.loyaltyPoints / maxPoints) * 100, 100);
   };
 
-  // --- LÓGICA DO ADMIN (CRUD REAL) ---
+  // --- LÓGICA DO ADMIN (CRUD) ---
 
   const handleOpenModal = (reward?: Reward) => {
     if (reward) {
@@ -353,36 +391,37 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
         </div>
       </div>
 
-      {/* Admin Stats */}
+      {/* Admin Stats Reais */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
            <div className="flex items-center gap-3 mb-2">
              <div className="bg-blue-100 p-2 rounded-lg"><Users className="text-blue-600" size={20} /></div>
              <span className="text-sm font-bold text-gray-500">Clientes no Clube</span>
            </div>
-           <p className="text-3xl font-bold text-gray-800">1.254</p>
-           <p className="text-xs text-green-600 flex items-center mt-1"><ArrowUpRight size={12} /> +12% este mês</p>
+           <p className="text-3xl font-bold text-gray-800">{clientsInClub}</p>
+           <p className="text-xs text-gray-400 mt-1">Baseado nos pedidos recebidos</p>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
            <div className="flex items-center gap-3 mb-2">
              <div className="bg-yellow-100 p-2 rounded-lg"><Star className="text-yellow-600" size={20} /></div>
              <span className="text-sm font-bold text-gray-500">Pontos em Circulação</span>
            </div>
-           <p className="text-3xl font-bold text-gray-800">45.200</p>
-           <p className="text-xs text-gray-500 mt-1">Equivalente a ~R$ 4.500 em prêmios</p>
+           <p className="text-3xl font-bold text-gray-800">{pointsInCirculation}</p>
+           <p className="text-xs text-gray-500 mt-1">Acumulado total de pontos</p>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
            <div className="flex items-center gap-3 mb-2">
              <div className="bg-green-100 p-2 rounded-lg"><Gift className="text-green-600" size={20} /></div>
              <span className="text-sm font-bold text-gray-500">Resgates (30 dias)</span>
            </div>
-           <p className="text-3xl font-bold text-gray-800">85</p>
-           <p className="text-xs text-green-600 flex items-center mt-1"><ArrowUpRight size={12} /> +5% este mês</p>
+           {/* Como não temos tabela de resgates ainda, mostramos 0 para ser realista */}
+           <p className="text-3xl font-bold text-gray-800">0</p>
+           <p className="text-xs text-gray-400 mt-1">Nenhum resgate registrado</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Top Clientes Table */}
+        {/* Top Clientes Table - Dinâmica */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="p-6 border-b border-gray-100">
              <h3 className="font-bold text-lg text-gray-800">Ranking de Clientes VIP</h3>
@@ -397,30 +436,41 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {MOCK_VIP_CLIENTS.map((client) => (
-                  <tr key={client.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-xs">
-                          {client.name.charAt(0)}
-                        </div>
-                        <span className="font-medium text-gray-900">{client.name}</span>
+                {calculatedClients.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-6 py-8 text-center text-gray-400">
+                      <div className="flex flex-col items-center">
+                        <Inbox size={30} className="mb-2 opacity-50" />
+                        <span className="text-sm">Nenhum cliente qualificado ainda.</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`text-xs px-2 py-1 rounded-full font-bold border ${
-                        client.loyaltyTier === 'Ouro' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                        client.loyaltyTier === 'Prata' ? 'bg-gray-50 text-gray-700 border-gray-200' :
-                        'bg-orange-50 text-orange-700 border-orange-200'
-                      }`}>
-                        {client.loyaltyTier}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-bold text-brand-600">
-                      {client.loyaltyPoints}
-                    </td>
                   </tr>
-                ))}
+                ) : (
+                  calculatedClients.map((client) => (
+                    <tr key={client.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-xs">
+                            {client.name.charAt(0)}
+                          </div>
+                          <span className="font-medium text-gray-900">{client.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`text-xs px-2 py-1 rounded-full font-bold border ${
+                          client.tier === 'Ouro' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                          client.tier === 'Prata' ? 'bg-gray-50 text-gray-700 border-gray-200' :
+                          'bg-orange-50 text-orange-700 border-orange-200'
+                        }`}>
+                          {client.tier}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-brand-600">
+                        {client.points}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
