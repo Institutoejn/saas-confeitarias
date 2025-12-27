@@ -6,10 +6,14 @@ import Checkout from './components/Checkout';
 import LoyaltyProgram from './components/LoyaltyProgram';
 import ProfileEditor from './components/ProfileEditor';
 import ProductManager from './components/ProductManager'; // Importação nova
+import Login from './components/Login'; // Importação do Login
 import { CustomCakeDetails, Order, CustomCakeDetails as ICakeDetails, CompanyProfile, CatalogItem, MOCK_CATALOG } from './types';
 import { Link as LinkIcon, Smartphone, Clock, MapPin, DollarSign, Menu, Edit2, Package, ListOrdered } from 'lucide-react';
 
 const App: React.FC = () => {
+  // Estado de Autenticação (Novo)
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
@@ -40,6 +44,11 @@ const App: React.FC = () => {
     total: number;
   } | null>(null);
 
+  // Handler para Login bem-sucedido
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+  };
+
   const handleOrderComplete = (details: CustomCakeDetails | CatalogItem, total: number) => {
     setOrderInProgress({ details, total });
   };
@@ -60,6 +69,11 @@ const App: React.FC = () => {
   const handleSaveProfile = (newProfile: CompanyProfile) => {
     setCompanyProfile(newProfile);
   };
+
+  // Se não estiver autenticado, exibe a tela de login
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   // Render content based on active tab
   const renderContent = () => {
