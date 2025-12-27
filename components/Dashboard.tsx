@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { MOCK_VIP_CLIENTS } from '../types';
 import { ShoppingBag, TrendingUp, Users, Clock, ArrowUpRight, ArrowDownRight, MoreHorizontal } from 'lucide-react';
 
