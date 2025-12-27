@@ -288,12 +288,7 @@ const App: React.FC = () => {
               />
            ) : (
              <div className="space-y-6 animate-fade-in">
-               <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-6 flex flex-col sm:flex-row justify-between items-center gap-2 text-center sm:text-left shadow-sm">
-                  <span className="text-sm">👋 Bem-vindo ao nosso Cardápio Digital!</span>
-                  {!window.location.search.includes('mode=customer') && (
-                    <button onClick={() => setIsCustomerView(false)} className="text-xs font-bold underline hover:text-blue-900 whitespace-nowrap">Voltar para Admin</button>
-                  )}
-               </div>
+               {/* Removido o banner azul de boas-vindas conforme solicitado */}
                
                {/* Se o catálogo estiver vazio no modo cliente, mostra mensagem */}
                {catalog.length === 0 ? (
@@ -302,7 +297,7 @@ const App: React.FC = () => {
                  </div>
                ) : (
                  <>
-                   <div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-gray-800">Cardápio</h2></div>
+                   <div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-gray-800">Cardápio Digital</h2></div>
                    <OrderBuilder onComplete={handleOrderComplete} catalog={catalog} />
                  </>
                )}
