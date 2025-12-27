@@ -9,9 +9,10 @@ interface SidebarProps {
   onClose: () => void;
   companyProfile: CompanyProfile;
   onProfileClick: () => void;
+  onLogout: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen, onClose, companyProfile, onProfileClick }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen, onClose, companyProfile, onProfileClick, onLogout }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { id: 'orders', label: 'Novo Pedido', icon: <Cake size={20} /> },
@@ -79,7 +80,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen, onCl
         </nav>
 
         <div className="p-4 border-t border-gray-100 space-y-1 bg-gray-50/50">
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors">
+          <button 
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
+          >
             <LogOut size={18} />
             <span>Sair da Conta</span>
           </button>

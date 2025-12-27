@@ -8,7 +8,10 @@ import ProfileEditor from './components/ProfileEditor';
 import ProductManager from './components/ProductManager'; // Importação nova
 import Login from './components/Login'; // Importação do Login
 import { CustomCakeDetails, Order, CustomCakeDetails as ICakeDetails, CompanyProfile, CatalogItem, MOCK_CATALOG } from './types';
-import { Link as LinkIcon, Smartphone, Clock, MapPin, DollarSign, Menu, Package, ListOrdered, X } from 'lucide-react';
+import { Link as LinkIcon, Smartphone, Clock, MapPin, DollarSign, Menu, Package, ListOrdered, X, Bell } from 'lucide-react';
+
+// Som de notificação discreto
+const NOTIFICATION_SOUND_URL = "https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3";
 
 const App: React.FC = () => {
   // Estado de Autenticação (Novo)
@@ -29,6 +32,9 @@ const App: React.FC = () => {
   
   // Estado para armazenar os pedidos recebidos (Simulando Banco de Dados)
   const [incomingOrders, setIncomingOrders] = useState<Order[]>([]);
+
+  // Estado para Notificação de Novo Pedido
+  const [showNotification, setShowNotification] = useState(false);
 
   // Estado do Catálogo de Produtos (Novo)
   const [catalog, setCatalog] = useState<CatalogItem[]>(MOCK_CATALOG);
@@ -68,6 +74,12 @@ const App: React.FC = () => {
     setIsAuthenticated(true);
   };
 
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setActiveTab('dashboard');
+    setIsCustomerView(false);
+  };
+
   const handleOrderComplete = (details: CustomCakeDetails | CatalogItem, total: number) => {
     setOrderInProgress({ details, total });
   };
@@ -81,8 +93,27 @@ const App: React.FC = () => {
     }
   };
 
+  const playNotificationSound = () => {
+    try {
+      const audio = new Audio(NOTIFICATION_SOUND_URL);
+      audio.volume = 0.5;
+      audio.play().catch(e => console.log("Interação do usuário necessária para áudio:", e));
+    } catch (error) {
+      console.error("Erro ao tocar som", error);
+    }
+  };
+
   const handleIncomingOrder = (newOrder: Order) => {
     setIncomingOrders(prev => [newOrder, ...prev]);
+    
+    // Dispara notificação visual e sonora
+    playNotificationSound();
+    setShowNotification(true);
+    
+    // Esconde a notificação após 5 segundos
+    setTimeout(() => {
+      setShowNotification(false);
+    }, 5000);
   };
 
   const handleSaveProfile = (newProfile: CompanyProfile) => {
@@ -99,6 +130,31 @@ const App: React.FC = () => {
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
+
+  // Componente de Notificação Toast
+  const NotificationToast = () => (
+    <div 
+      className={`fixed top-4 right-4 z-[100] transform transition-all duration-500 ease-in-out ${
+        showNotification ? 'translate-y-0 opacity-100' : '-translate-y-20 opacity-0 pointer-events-none'
+      }`}
+    >
+      <div className="bg-gray-900 text-white px-5 py-4 rounded-xl shadow-2xl flex items-center gap-4 border border-gray-700 min-w-[300px]">
+        <div className="bg-green-500 p-2.5 rounded-full shadow-lg shadow-green-500/30 animate-pulse">
+          <Bell size={20} className="text-white" fill="white" />
+        </div>
+        <div className="flex-1">
+          <h4 className="font-bold text-sm">Novo Pedido Recebido!</h4>
+          <p className="text-xs text-gray-300 mt-0.5">Verifique a aba de pedidos.</p>
+        </div>
+        <button 
+          onClick={() => setShowNotification(false)} 
+          className="text-gray-400 hover:text-white p-1 hover:bg-gray-800 rounded transition-colors"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </div>
+  );
 
   // Render content based on active tab
   const renderContent = () => {
@@ -145,21 +201,43 @@ const App: React.FC = () => {
             </div>
 
             {/* Sub-navegação interna (Pedidos vs Produtos) */}
-            <div className="flex border-b border-gray-200 gap-6">
-              <button 
-                onClick={() => setOrdersViewMode('incoming')}
-                className={`pb-3 font-medium flex items-center gap-2 transition-colors relative ${ordersViewMode === 'incoming' ? 'text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <ListOrdered size={20} /> Pedidos Recebidos
-                {ordersViewMode === 'incoming' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600"></div>}
-              </button>
-              <button 
-                onClick={() => setOrdersViewMode('products')}
-                className={`pb-3 font-medium flex items-center gap-2 transition-colors relative ${ordersViewMode === 'products' ? 'text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <Package size={20} /> Gerenciar Produtos e Cardápio
-                {ordersViewMode === 'products' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600"></div>}
-              </button>
+            <div className="flex justify-between items-end border-b border-gray-200">
+               <div className="flex gap-6">
+                <button 
+                  onClick={() => setOrdersViewMode('incoming')}
+                  className={`pb-3 font-medium flex items-center gap-2 transition-colors relative ${ordersViewMode === 'incoming' ? 'text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <div className="relative">
+                    <ListOrdered size={20} />
+                    {/* BELL ICON ADDED HERE IF THERE ARE NOTIFICATIONS (RED DOT) */}
+                    {incomingOrders.length > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-red-500 rounded-full border border-white"></span>
+                    )}
+                  </div>
+                  Pedidos Recebidos
+                  {ordersViewMode === 'incoming' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600"></div>}
+                </button>
+                <button 
+                  onClick={() => setOrdersViewMode('products')}
+                  className={`pb-3 font-medium flex items-center gap-2 transition-colors relative ${ordersViewMode === 'products' ? 'text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <Package size={20} /> Gerenciar Produtos e Cardápio
+                  {ordersViewMode === 'products' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600"></div>}
+                </button>
+              </div>
+
+              {/* Ícone de Sino Fixo na Barra de Navegação Interna */}
+              <div className="pb-3 pr-2">
+                 <div className="relative cursor-pointer hover:bg-gray-100 p-2 rounded-full transition-colors">
+                   <Bell size={20} className={incomingOrders.length > 0 ? "text-brand-600 animate-pulse" : "text-gray-400"} />
+                   {incomingOrders.length > 0 && (
+                     <span className="absolute top-1 right-1 flex h-3 w-3">
+                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                       <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                     </span>
+                   )}
+                 </div>
+              </div>
             </div>
 
             {/* Conteúdo da Aba Interna */}
@@ -277,7 +355,8 @@ const App: React.FC = () => {
     }
 
     if (activeTab === 'loyalty') {
-      return <LoyaltyProgram />;
+      // Passa isCustomerView para o componente controlar se mostra Admin Dashboard ou Cliente
+      return <LoyaltyProgram isCustomerView={isCustomerView} />;
     }
 
     return (
@@ -291,6 +370,11 @@ const App: React.FC = () => {
   if (isCustomerView) {
     return (
       <div className="min-h-screen bg-gray-50 font-sans">
+        {/* Renderiza a notificação mesmo no modo cliente (opcional, mas bom para testar) 
+            ou podemos ocultar se quisermos que apareça só no painel admin. 
+            Vou manter visível globalmente para feedback imediato neste demo. */}
+        <NotificationToast />
+
         <header className="bg-white shadow-sm py-4 px-6 sticky top-0 z-50">
           <div className="max-w-4xl mx-auto flex justify-between items-center">
              <div className="flex items-center gap-2">
@@ -318,6 +402,8 @@ const App: React.FC = () => {
   // Layout Padrão (Admin Dashboard)
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans relative">
+      <NotificationToast />
+      
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
@@ -337,6 +423,7 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)}
         companyProfile={companyProfile}
         onProfileClick={() => setIsProfileModalOpen(true)}
+        onLogout={handleLogout} // Passando a função de logout
       />
       
       <ProfileEditor 

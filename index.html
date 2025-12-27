@@ -52,8 +52,15 @@
         letter-spacing: -0.02em;
       }
 
-      /* Enforce Montserrat Bold (700) for Strong/Bold elements */
-      strong, b, .font-bold {
+      /* Enforce Montserrat Bold (700) and Apply Specific Charcoal Color for semantic emphasis */
+      strong, b {
+        font-family: 'Montserrat', sans-serif;
+        font-weight: 700;
+        color: #4A4A4A; /* Cinza Chumbo solicitado */
+      }
+      
+      /* Enforce Font Family for utility class, but allow color inheritance/override by Tailwind */
+      .font-bold {
         font-family: 'Montserrat', sans-serif;
         font-weight: 700;
       }
