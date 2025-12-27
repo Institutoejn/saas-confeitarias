@@ -8,7 +8,7 @@ import ProfileEditor from './components/ProfileEditor';
 import ProductManager from './components/ProductManager'; // Importação nova
 import Login from './components/Login'; // Importação do Login
 import { CustomCakeDetails, Order, CustomCakeDetails as ICakeDetails, CompanyProfile, CatalogItem, MOCK_CATALOG } from './types';
-import { Link as LinkIcon, Smartphone, Clock, MapPin, DollarSign, Menu, Edit2, Package, ListOrdered } from 'lucide-react';
+import { Link as LinkIcon, Smartphone, Clock, MapPin, DollarSign, Menu, Package, ListOrdered } from 'lucide-react';
 
 const App: React.FC = () => {
   // Estado de Autenticação (Novo)
@@ -293,6 +293,8 @@ const App: React.FC = () => {
         }} 
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        companyProfile={companyProfile}
+        onProfileClick={() => setIsProfileModalOpen(true)}
       />
       
       <ProfileEditor 
@@ -312,29 +314,14 @@ const App: React.FC = () => {
            <div className="w-8"></div> {/* Spacer to center title */}
         </div>
 
-        {/* Desktop Header */}
-        <header className="hidden md:flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-gray-400 text-sm font-medium uppercase tracking-wider">SweetSaaS Panel</h1>
+        {/* Desktop Header - CENTRALIZADO */}
+        <header className="hidden md:flex justify-center items-center mb-8 relative border-b border-transparent pb-4">
+          <div className="flex items-center gap-2 transition-transform hover:scale-105 cursor-default">
+             <div className="w-10 h-10 bg-brand-600 rounded-xl shadow-lg shadow-brand-200 flex items-center justify-center text-white font-bold text-xl">
+               S
+             </div>
+             <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">SweetSaaS</h1>
           </div>
-          
-          {/* Clickable Profile Section */}
-          <button 
-            onClick={() => setIsProfileModalOpen(true)}
-            className="flex items-center gap-4 hover:bg-white hover:shadow-sm p-2 rounded-xl transition-all group"
-            title="Clique para editar o perfil da empresa"
-          >
-             <div className="text-right hidden sm:block">
-               <p className="text-sm font-bold text-gray-800 group-hover:text-brand-600 transition-colors">{companyProfile.name}</p>
-               <p className="text-xs text-green-600">{companyProfile.plan}</p>
-             </div>
-             <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden border-2 border-white shadow-sm relative">
-                <img src={companyProfile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                  <Edit2 size={12} className="text-white opacity-0 group-hover:opacity-100" />
-                </div>
-             </div>
-          </button>
         </header>
         
         {renderContent()}
