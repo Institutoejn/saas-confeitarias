@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { MOCK_VIP_CLIENTS, User, Reward, Order } from '../types';
-import { Gift, Star, Award, TrendingUp, CheckCircle, Lock, Users, ArrowUpRight, Plus, Settings, Edit2, Trash2, X, Save, Loader2, Inbox } from 'lucide-react';
+import { Gift, Star, Award, TrendingUp, CheckCircle, Lock, Users, Plus, Settings, Edit2, Trash2, X, Save, Loader2, Inbox } from 'lucide-react';
 
 interface LoyaltyProgramProps {
   isCustomerView?: boolean;
