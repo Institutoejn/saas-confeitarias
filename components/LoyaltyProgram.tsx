@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { MOCK_VIP_CLIENTS, MOCK_REWARDS, User, Reward } from '../types';
-import { Gift, Star, Award, TrendingUp, CheckCircle, Lock, Users, ArrowUpRight, Plus, Settings, Edit2, Trash2, X, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../services/supabaseClient';
+import { MOCK_VIP_CLIENTS, User, Reward } from '../types';
+import { Gift, Star, Award, TrendingUp, CheckCircle, Lock, Users, ArrowUpRight, Plus, Settings, Edit2, Trash2, X, Save, Loader2 } from 'lucide-react';
 
 interface LoyaltyProgramProps {
   isCustomerView?: boolean;
@@ -8,10 +9,11 @@ interface LoyaltyProgramProps {
 
 const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false }) => {
   // --- ESTADOS GLOBAIS ---
+  const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<User>(MOCK_VIP_CLIENTS[0]);
   
-  // Estado para gerenciar as recompensas (CRUD)
-  const [rewards, setRewards] = useState<Reward[]>(MOCK_REWARDS);
+  // Estado para gerenciar as recompensas (Agora vindo do DB)
+  const [rewards, setRewards] = useState<Reward[]>([]);
   
   // Estados do Modal de Gestão
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -26,6 +28,60 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
 
   // Histórico local (apenas visualização)
   const [history, setHistory] = useState<{reward: string, date: string}[]>([]);
+
+  // 1. Buscar Recompensas do Supabase ao carregar
+  useEffect(() => {
+    fetchRewards();
+  }, []);
+
+  const fetchRewards = async () => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      let query = supabase.from('rewards').select('*');
+      
+      // Se for ADMIN (tem sessão e não está no modo visualização de cliente)
+      if (session?.user && !isCustomerView) {
+        query = query.eq('user_id', session.user.id);
+      } else {
+        // Se for CLIENTE (ou simulando), pega o ID da loja da URL
+        const params = new URLSearchParams(window.location.search);
+        const storeId = params.get('storeId');
+        
+        if (storeId) {
+          query = query.eq('user_id', storeId);
+        } else if (!session?.user) {
+          // Se não tem ID na URL e não é admin logado, não mostra nada por segurança
+          // ou poderia mostrar um set vazio.
+          console.warn("Nenhum storeId fornecido para visualização pública.");
+          setRewards([]);
+          return;
+        }
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      if (data) {
+        const mappedRewards: Reward[] = data.map((r: any) => ({
+           id: r.id,
+           title: r.title,
+           description: r.description,
+           costInPoints: r.cost_in_points,
+           type: r.type,
+           minTier: r.min_tier,
+           imageUrl: '' // Campo futuro
+        }));
+        setRewards(mappedRewards);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar recompensas:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // --- LÓGICA DO CLIENTE ---
   const handleRedeem = (reward: Reward) => {
@@ -49,7 +105,7 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
     return Math.min((currentUser.loyaltyPoints / maxPoints) * 100, 100);
   };
 
-  // --- LÓGICA DO ADMIN (CRUD) ---
+  // --- LÓGICA DO ADMIN (CRUD REAL) ---
 
   const handleOpenModal = (reward?: Reward) => {
     if (reward) {
@@ -68,27 +124,72 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
     setIsModalOpen(true);
   };
 
-  const handleDeleteReward = (id: string) => {
+  const handleDeleteReward = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir esta recompensa?')) {
-      setRewards(prev => prev.filter(r => r.id !== id));
+      try {
+        const { error } = await supabase.from('rewards').delete().eq('id', id);
+        if (error) throw error;
+        setRewards(prev => prev.filter(r => r.id !== id));
+      } catch (error: any) {
+        alert('Erro ao excluir: ' + error.message);
+      }
     }
   };
 
-  const handleSaveReward = (e: React.FormEvent) => {
+  const handleSaveReward = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     
-    if (editingReward) {
-      // Editar existente
-      setRewards(prev => prev.map(r => r.id === editingReward.id ? { ...r, ...formData } as Reward : r));
-    } else {
-      // Criar nova
-      const newReward: Reward = {
-        id: `rew-${Math.random().toString(36).substr(2, 9)}`,
-        ...formData as Omit<Reward, 'id'>
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error("Usuário não autenticado");
+
+      const payload = {
+        user_id: session.user.id,
+        title: formData.title,
+        description: formData.description,
+        cost_in_points: formData.costInPoints,
+        type: formData.type,
+        min_tier: formData.minTier
       };
-      setRewards(prev => [newReward, ...prev]);
+
+      if (editingReward) {
+        // Update
+        const { error } = await supabase
+          .from('rewards')
+          .update(payload)
+          .eq('id', editingReward.id);
+
+        if (error) throw error;
+        
+        setRewards(prev => prev.map(r => r.id === editingReward.id ? { ...r, ...formData } as Reward : r));
+      } else {
+        // Insert
+        const { data, error } = await supabase
+          .from('rewards')
+          .insert([payload])
+          .select();
+
+        if (error) throw error;
+
+        if (data) {
+           const newReward: Reward = {
+             id: data[0].id,
+             title: data[0].title,
+             description: data[0].description,
+             costInPoints: data[0].cost_in_points,
+             type: data[0].type,
+             minTier: data[0].min_tier
+           };
+           setRewards(prev => [newReward, ...prev]);
+        }
+      }
+      setIsModalOpen(false);
+    } catch (error: any) {
+      alert('Erro ao salvar: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setIsModalOpen(false);
   };
 
   // --- RENDERIZAÇÃO: VISÃO DO CLIENTE ---
@@ -147,52 +248,60 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
               <Gift className="text-brand-600" />
               <h3 className="text-xl font-bold text-gray-800">Recompensas Disponíveis</h3>
             </div>
+            
+            {loading ? (
+               <div className="text-center py-10"><Loader2 className="animate-spin inline text-brand-600" /> Carregando prêmios...</div>
+            ) : rewards.length === 0 ? (
+               <div className="bg-white p-6 rounded-xl text-center text-gray-500 border border-gray-100">
+                 Nenhuma recompensa disponível nesta loja no momento.
+               </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {rewards.map(reward => {
+                  const canRedeem = currentUser.loyaltyPoints >= reward.costInPoints;
+                  const isLocked = reward.minTier === 'Ouro' && currentUser.loyaltyTier !== 'Ouro';
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {rewards.map(reward => {
-                const canRedeem = currentUser.loyaltyPoints >= reward.costInPoints;
-                const isLocked = reward.minTier === 'Ouro' && currentUser.loyaltyTier !== 'Ouro';
-
-                return (
-                  <div 
-                    key={reward.id} 
-                    className={`bg-white rounded-xl p-5 border-2 transition-all relative overflow-hidden group
-                      ${canRedeem && !isLocked
-                        ? 'border-gray-100 hover:border-brand-300 hover:shadow-md' 
-                        : 'border-gray-100 opacity-70 grayscale-[0.5]'}`}
-                  >
-                    {isLocked && (
-                      <div className="absolute top-3 right-3 text-gray-400 bg-gray-100 p-1 rounded-full" title="Nível insuficiente">
-                        <Lock size={16} />
-                      </div>
-                    )}
-                    
-                    <div className="flex justify-between items-start mb-3">
-                      <div className={`p-3 rounded-lg ${reward.type === 'free_product' ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'}`}>
-                        {reward.type === 'free_product' ? <Gift size={24} /> : <TrendingUp size={24} />}
-                      </div>
-                      <span className="font-bold text-brand-600 bg-brand-50 px-3 py-1 rounded-full text-sm">
-                        {reward.costInPoints} pts
-                      </span>
-                    </div>
-                    
-                    <h4 className="font-bold text-gray-800 text-lg mb-1">{reward.title}</h4>
-                    <p className="text-sm text-gray-500 mb-4 min-h-[40px]">{reward.description}</p>
-                    
-                    <button 
-                      onClick={() => handleRedeem(reward)}
-                      disabled={!canRedeem || isLocked}
-                      className={`w-full py-2.5 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2
+                  return (
+                    <div 
+                      key={reward.id} 
+                      className={`bg-white rounded-xl p-5 border-2 transition-all relative overflow-hidden group
                         ${canRedeem && !isLocked
-                          ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-md shadow-brand-200' 
-                          : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                          ? 'border-gray-100 hover:border-brand-300 hover:shadow-md' 
+                          : 'border-gray-100 opacity-70 grayscale-[0.5]'}`}
                     >
-                      {isLocked ? `Exclusivo ${reward.minTier}` : canRedeem ? 'Resgatar Agora' : `Faltam ${reward.costInPoints - currentUser.loyaltyPoints} pts`}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                      {isLocked && (
+                        <div className="absolute top-3 right-3 text-gray-400 bg-gray-100 p-1 rounded-full" title="Nível insuficiente">
+                          <Lock size={16} />
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-between items-start mb-3">
+                        <div className={`p-3 rounded-lg ${reward.type === 'free_product' ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'}`}>
+                          {reward.type === 'free_product' ? <Gift size={24} /> : <TrendingUp size={24} />}
+                        </div>
+                        <span className="font-bold text-brand-600 bg-brand-50 px-3 py-1 rounded-full text-sm">
+                          {reward.costInPoints} pts
+                        </span>
+                      </div>
+                      
+                      <h4 className="font-bold text-gray-800 text-lg mb-1">{reward.title}</h4>
+                      <p className="text-sm text-gray-500 mb-4 min-h-[40px]">{reward.description}</p>
+                      
+                      <button 
+                        onClick={() => handleRedeem(reward)}
+                        disabled={!canRedeem || isLocked}
+                        className={`w-full py-2.5 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2
+                          ${canRedeem && !isLocked
+                            ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-md shadow-brand-200' 
+                            : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                      >
+                        {isLocked ? `Exclusivo ${reward.minTier}` : canRedeem ? 'Resgatar Agora' : `Faltam ${reward.costInPoints - currentUser.loyaltyPoints} pts`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="space-y-6">
@@ -322,7 +431,9 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
            <h3 className="font-bold text-lg text-gray-800 mb-4">Recompensas Ativas</h3>
            
            <div className="space-y-3 flex-1 overflow-y-auto max-h-[400px]">
-             {rewards.length === 0 ? (
+             {loading ? (
+               <div className="text-center py-4"><Loader2 className="animate-spin inline text-brand-600" /></div>
+             ) : rewards.length === 0 ? (
                <div className="text-center py-8 text-gray-400 border-2 border-dashed border-gray-100 rounded-lg">
                  Nenhuma recompensa cadastrada.
                </div>
@@ -453,9 +564,10 @@ const LoyaltyProgram: React.FC<LoyaltyProgramProps> = ({ isCustomerView = false 
                 </button>
                 <button 
                   type="submit" 
+                  disabled={loading}
                   className="flex-1 py-2.5 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700 flex items-center justify-center gap-2"
                 >
-                  <Save size={18} /> Salvar
+                  {loading ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /> Salvar</>}
                 </button>
               </div>
             </form>

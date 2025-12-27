@@ -62,6 +62,7 @@ const App: React.FC = () => {
         setIsCustomerView(true);
         if (storeId) {
           fetchPublicCatalog(storeId);
+          fetchPublicProfile(storeId);
         }
       }
     }
@@ -95,12 +96,8 @@ const App: React.FC = () => {
       const baseUrl = window.location.origin + window.location.pathname;
       setShareableLink(`${baseUrl}?mode=customer&storeId=${session.user.id}`);
 
-      // Carrega dados do perfil (Meta dados ou tabela profiles futura)
-      setCompanyProfile(prev => ({
-        ...prev,
-        name: session.user.user_metadata.store_name || prev.name,
-        email: session.user.email || prev.email
-      }));
+      // Tenta carregar dados do perfil da tabela profiles, fallback para metadata
+      fetchOwnerProfile(session.user.id);
       
       // Se for ADMIN, carrega o catálogo dele para gestão
       if (!isCustomerView) {
@@ -108,6 +105,39 @@ const App: React.FC = () => {
       }
     }
   }, [session, isCustomerView]);
+
+  // Busca dados públicos da loja para o cliente
+  const fetchPublicProfile = async (storeId: string) => {
+    try {
+      const { data } = await supabase.from('profiles').select('*').eq('id', storeId).single();
+      if (data) {
+        setCompanyProfile(prev => ({
+          ...prev,
+          name: data.store_name || 'Confeitaria',
+          avatarUrl: data.avatar_url || prev.avatarUrl
+        }));
+      }
+    } catch (e) {
+      console.error("Erro ao carregar perfil da loja", e);
+    }
+  };
+
+  // Busca dados do perfil do dono (Admin)
+  const fetchOwnerProfile = async (userId: string) => {
+    try {
+      const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      if (data) {
+        setCompanyProfile(prev => ({
+          ...prev,
+          name: data.store_name || session?.user?.user_metadata?.store_name || prev.name,
+          email: session?.user?.email || prev.email,
+          avatarUrl: data.avatar_url || prev.avatarUrl
+        }));
+      }
+    } catch (e) {
+       console.error("Erro ao carregar perfil do dono", e);
+    }
+  };
 
   // Função para buscar catálogo (usada tanto pelo Admin quanto pelo Cliente Público)
   const fetchPublicCatalog = async (storeId: string) => {
@@ -185,9 +215,25 @@ const App: React.FC = () => {
     }, 5000);
   };
 
-  const handleSaveProfile = (newProfile: CompanyProfile) => {
-    setCompanyProfile(newProfile);
-    // Here we would update Supabase profile
+  const handleSaveProfile = async (newProfile: CompanyProfile) => {
+    setCompanyProfile(newProfile); // Atualização otimista da UI
+    
+    if (session?.user) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            store_name: newProfile.name,
+            avatar_url: newProfile.avatarUrl
+          })
+          .eq('id', session.user.id);
+        
+        if (error) throw error;
+      } catch (e) {
+        console.error("Erro ao salvar perfil no banco", e);
+        alert("Houve um erro ao salvar as alterações do perfil no servidor.");
+      }
+    }
   };
 
   const copyLinkToClipboard = () => {
@@ -214,7 +260,13 @@ const App: React.FC = () => {
         <header className="bg-white shadow-sm py-4 px-6 sticky top-0 z-50">
           <div className="max-w-4xl mx-auto flex justify-between items-center">
              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center text-white font-bold shadow-brand-200 shadow-md">S</div>
+                <div className="w-10 h-10 overflow-hidden bg-brand-600 rounded-xl flex items-center justify-center text-white font-bold shadow-brand-200 shadow-md">
+                   {companyProfile.avatarUrl.startsWith('http') ? (
+                     <img src={companyProfile.avatarUrl} alt="Logo" className="w-full h-full object-cover" />
+                   ) : (
+                     "S"
+                   )}
+                </div>
                 <div className="flex flex-col">
                   {/* Nota: Em um app real, buscaríamos o nome da loja via ID também na tabela profiles */}
                   <span className="font-bold text-gray-800 leading-tight">{companyProfile.name === 'Confeitaria' ? 'Confeitaria' : companyProfile.name}</span>
